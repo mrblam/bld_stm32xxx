@@ -20,14 +20,15 @@
 #include <main.h>
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include "board.h"
+#include <stdint.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
-#include "bootloader.h"
-#include "app_queue.h"
 #include <stdbool.h>
 #include <string.h>
+#include "board.h"
+#include "bootloader.h"
+#include "app_queue.h"
 #include "app_hex_line_format.h"
 #include "flash_hw.h"
 /* USER CODE END Includes */
@@ -46,8 +47,7 @@ typedef struct communication {
 #define TX_TIMEOUT                  ((uint32_t)100)
 #define TX_MAX_DELAY                0xFFFFFFFFU
 #define USER_APP_ADDRESS            (0x08080000u)
-#define FLASH_USER_START_ADDR       ADDR_FLASH_SECTOR_2   /* Start @ of user Flash area */
-#define BOOT_VERSION                0x10
+#define LEN_BUFFER                  60
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -64,8 +64,8 @@ app_queue       g_queue;
 hexLine         g_record;
 bool            g_is_finish = false;
 bool            g_is_new_hex_line = false;
-uint8_t         g_my_rx_buffer[60];
-uint8_t         g_buff_temp[60];
+uint8_t         g_my_rx_buffer[LEN_BUFFER];
+uint8_t         g_buff_temp[LEN_BUFFER];
 uint8_t         data;
 uint16_t        g_line = 0;
 uint32_t        FlashProtection = 0;
@@ -76,8 +76,6 @@ __IO uint32_t   flashdestination;
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
 /* USER CODE BEGIN PFP */
-uint8_t DEV_FLASH_Erase(uint32_t StartSector,uint8_t numberSector);
-uint8_t DEV_FLASH_Program(uint32_t add,uint8_t* data,uint16_t len);
 void DEV_SendData(uint8_t *p_string);
 void DEV_PrintMsg(char *format,...);
 uint8_t boot_receive_new_firmware(void);
@@ -128,9 +126,9 @@ int main(void)
   {
       switch (boot_state) {
       case Boot_State_Idle:
-          if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0)) {
-              HAL_Delay(1000);
-              if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0)) {
+          if (DRV_GPIO_ReadPin(BOOT_BTN_PORT, BOOT_BTN_PIN)) {
+              DRV_Delay(1000);
+              if (DRV_GPIO_ReadPin(BOOT_BTN_PORT, BOOT_BTN_PIN)) {
                   boot_state = Boot_State_Init;
               }
           } else {
@@ -140,11 +138,11 @@ int main(void)
       case Boot_State_Init:
           DEV_SendData((uint8_t*) "Boot Starting!!!\r\n");
           APP_QUEUE_Init(&g_queue);
-          FlashProtection = FLASH_GetWriteProtectionStatus();
+          FlashProtection = DRV_FLASH_GetWriteProtectionStatus();
           if (FlashProtection != FLASHIF_PROTECTION_NONE) {
               DEV_SendData((uint8_t*) "Flash is protected!\r\n");
           }
-          if(FLASH_Erase(USER_APP_ADDRESS,2)){
+          if(DRV_FLASH_Erase(USER_APP_ADDRESS,2)){
               DEV_SendData((uint8_t*) "Erase flash is failed!\r\n");
           }
           boot_state = Boot_State_Handler_Request;
@@ -156,9 +154,9 @@ int main(void)
       case Boot_State_Jump_To_User_App:
           if (!boot_check_is_new_firmware(USER_APP_ADDRESS)) {
               DEV_SendData((uint8_t*) "Jumping Application...");
-              HAL_GPIO_DeInit(GPIOA, GPIO_PIN_0);
-              HAL_RCC_DeInit();
-              HAL_UART_DeInit(&huart2);
+              DRV_GPIO_DeInit(BOOT_BTN_PORT, BOOT_BTN_PIN);
+              DRV_RCC_DeInit();
+              DRV_UART_DeInit(&huart2);
               boot_jump_to_app(USER_APP_ADDRESS);
           }else{
               DEV_SendData((uint8_t*) "Missing user app!\r\n");
@@ -189,11 +187,11 @@ int main(void)
           break;
       case Boot_State_Get_Basic_Info:
           uint32_t device_id,rev_id,uid_w1,uid_w2,uid_w0;
-          device_id = HAL_GetDEVID();
-          rev_id = HAL_GetREVID();
-          uid_w0 = HAL_GetUIDw0();
-          uid_w1 = HAL_GetUIDw1();
-          uid_w2 = HAL_GetUIDw2();
+          device_id = DRV_GetDEVID();
+          rev_id = DRV_GetREVID();
+          uid_w0 = DRV_GetUIDw0();
+          uid_w1 = DRV_GetUIDw1();
+          uid_w2 = DRV_GetUIDw2();
           DEV_SendData((uint8_t*) "IAP version 1.0\r\n");
           DEV_PrintMsg("Device ID: %x\r\n",device_id);
           DEV_PrintMsg("Revision ID: %x\r\n",rev_id);
@@ -274,40 +272,11 @@ void DEV_PrintMsg(char *format,...)
     DRV_UART_Transmit(&huart2,(uint8_t*)str, strlen(str),TX_MAX_DELAY);
     va_end(args);
 }
-uint8_t DEV_FLASH_Program(uint32_t add,uint8_t* data,uint16_t len){
-#if 1
-    uint8_t i;
-    uint64_t data64 = 0;
-    for(i = 0;i < len/4;i++){
-        data64 = (data[0 + 4*i] ) |
-                 (data[1 + 4*i] << 8) |
-                 (data[2 + 4*i] << 16) |
-                 (data[3 + 4*i] << 24) ;
-        if (DRV_FLASH_ProgramWord(add, data64) == HAL_OK) {
-            if (*(uint32_t*)add != (uint32_t)(data64))
-            {
-              return 1;
-            }
-        }else{
-            return 1;
-        }
-        data64 = 0;
-        add += 4U;
-    }
-    return 0;
-#else
-    if(FLASH_If_Write(add,(uint32_t*)data,len) == FLASHIF_OK){
-        return 0;
-    }else{
-        return 1;
-    }
-#endif
-}
 uint8_t boot_receive_new_firmware(void) {
     if (g_is_new_hex_line) {
         if (!APP_QUEUE_CheckFull(&g_queue)) {
             APP_QUEUE_EnQueue(&g_queue, g_my_rx_buffer);
-            memset((char*) g_my_rx_buffer,0,60);
+            memset((char*) g_my_rx_buffer,0,LEN_BUFFER);
         }
         g_is_new_hex_line = false;
     }
@@ -320,7 +289,7 @@ uint8_t boot_receive_new_firmware(void) {
         } else {
             if (g_record.type == DataRecord) {
                 APP_GetDataHexLine(&g_record, g_buff_temp);
-                if(!DEV_FLASH_Program(g_record.address,g_buff_temp,g_record.data_len)){
+                if(!DRV_FLASH_Program(g_record.address,g_buff_temp,g_record.data_len)){
                     DEV_SendData((uint8_t *)">");
                 }else{
                     DEV_SendData((uint8_t *)"Write data to flash error!\r\n");
@@ -342,9 +311,9 @@ uint8_t boot_receive_new_firmware(void) {
     return 0;
 }
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle) {
-    HAL_UART_Receive_IT(&huart2, &data, 1);
+    DRV_UART_Receive_IT(&huart2, &data, 1);
     if(boot_state == Boot_State_Receive_new_firmware){
-        if (s_rx.index < 50) {
+        if (s_rx.index < LEN_BUFFER) {
             s_rx.buffer[s_rx.index] = data;
             s_rx.index++;
             if (s_rx.buffer[s_rx.index - 1] == '\n') {
@@ -353,7 +322,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle) {
             }
         } else {
             s_rx.index = 0;
-            memset(s_rx.buffer, 0, 50);
+            memset(s_rx.buffer, 0, LEN_BUFFER);
         }
     }
 }

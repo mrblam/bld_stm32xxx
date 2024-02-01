@@ -49,9 +49,9 @@ enum{
 
 #define FLASH_USER_START_ADDR       ADDR_FLASH_SECTOR_2
 /************************************************/
-void FLASH_Init();
-uint8_t FLASH_Erase(uint32_t StartSector,uint8_t numberSector);
-uint8_t FLASH_ProgramWord(uint32_t add,uint8_t* data,uint16_t len);
-uint16_t FLASH_GetWriteProtectionStatus(void);
+void DRV_FLASH_Init();
+uint8_t DRV_FLASH_Erase(uint32_t StartSector,uint8_t numberSector);
+uint8_t DRV_FLASH_Program(uint32_t add,uint8_t* data,uint16_t len);
+uint16_t DRV_FLASH_GetWriteProtectionStatus(void);
 
 #endif /* INC_BOARD_FLASH_HW_H_ */

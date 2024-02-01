@@ -38,7 +38,7 @@ static uint32_t GetSector(uint32_t Address) {
     }
     return sector;
 }
-void FLASH_Init() {
+void DRV_FLASH_Init() {
     HAL_FLASH_Unlock();
 
     /* Clear pending flags (if any) */
@@ -46,12 +46,12 @@ void FLASH_Init() {
                             FLASH_FLAG_WRPERR | FLASH_FLAG_PGAERR |
                             FLASH_FLAG_PGPERR | FLASH_FLAG_PGSERR);
 }
-uint8_t FLASH_Erase(uint32_t StartSector, uint8_t numberSector) {
+uint8_t DRV_FLASH_Erase(uint32_t StartSector, uint8_t numberSector) {
     uint32_t UserStartSector;
     uint32_t SectorError = 0;
     FLASH_EraseInitTypeDef pEraseInit;
     /* Unlock the Flash to enable the flash control register access *************/
-    FLASH_Init();
+    DRV_FLASH_Init();
     /* Get the sector where start the user flash area */
     UserStartSector = GetSector(StartSector);
     pEraseInit.TypeErase = TYPEERASE_SECTORS;
@@ -64,11 +64,28 @@ uint8_t FLASH_Erase(uint32_t StartSector, uint8_t numberSector) {
     }
     return (0);
 }
-uint8_t FLASH_ProgramWord(uint32_t add, uint8_t *data, uint16_t len) {
-
+uint8_t DRV_FLASH_Program(uint32_t add,uint8_t* data,uint16_t len){
+    uint8_t i;
+    uint64_t data64 = 0;
+    for(i = 0;i < len/4;i++){
+        data64 = (data[0 + 4*i] ) |
+                 (data[1 + 4*i] << 8) |
+                 (data[2 + 4*i] << 16) |
+                 (data[3 + 4*i] << 24) ;
+        if (HAL_FLASH_Program(FLASH_TYPEPROGRAM_WORD, add, data64) == HAL_OK) {
+            if (*(uint32_t*)add != (uint32_t)(data64))
+            {
+              return 1;
+            }
+        }else{
+            return 1;
+        }
+        data64 = 0;
+        add += 4U;
+    }
     return 0;
 }
-uint16_t FLASH_GetWriteProtectionStatus(void) {
+uint16_t DRV_FLASH_GetWriteProtectionStatus(void) {
     uint32_t ProtectedSECTOR = 0xFFF;
     FLASH_OBProgramInitTypeDef OptionsBytesStruct;
 
