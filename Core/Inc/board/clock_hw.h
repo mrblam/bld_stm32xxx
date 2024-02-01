@@ -8,6 +8,6 @@
 #ifndef INC_BOARD_CLOCK_HW_H_
 #define INC_BOARD_CLOCK_HW_H_
 
-
+void DRV_Config_SystemClock(void);
 
 #endif /* INC_BOARD_CLOCK_HW_H_ */

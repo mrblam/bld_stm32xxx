@@ -70,7 +70,6 @@ uint8_t         data;
 uint16_t        g_line = 0;
 uint32_t        FlashProtection = 0;
 Boot_State      boot_state = Boot_State_Idle;
-__IO uint32_t   flashdestination;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -117,7 +116,6 @@ int main(void)
   BOARD_Init();
   HAL_UART_Receive_IT(&huart2, &data, 1);
   s_rx.buffer = g_my_rx_buffer;
-  flashdestination = USER_APP_ADDRESS;
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -254,7 +252,6 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 }
-
 /* USER CODE BEGIN 4 */
 void DEV_SendData(uint8_t *p_string){
     uint16_t length = 0;
